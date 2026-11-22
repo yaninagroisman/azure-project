@@ -5,12 +5,12 @@ trigger:
       - feature/advanced-ci
 
 pool:
-  vmImage: 'ubuntu-24.04'
+  vmImage: "ubuntu-24.04"
 
 variables:
-  major: '1'
-  minor: '0'
-  version: '$(major).$(minor).$(Build.BuildId)'
+  major: "1"
+  minor: "0"
+  version: "$(major).$(minor).$(Build.BuildId)"
 
 steps:
   - checkout: self
@@ -37,46 +37,46 @@ steps:
       git diff --check "$empty_tree" HEAD -- HelloWorld/
 
       echo "✅ Guardian Preflight PASSED"
-    displayName: 'Guardian Preflight - Fast Checks'
-
+    displayName: "Guardian Preflight - Fast Checks"
 
   - task: UseDotNet@2
-    displayName: 'Install .NET SDK'
+    displayName: "Install .NET SDK"
     inputs:
-      packageType: 'sdk'
-      version: '8.0.x'
+      packageType: "sdk"
+      version: "8.0.x"
 
   - script: |
       echo "Application Version: $(version)"
       echo "Build ID: $(Build.BuildId)"
-    displayName: 'Generate and Print Version'
+    displayName: "Generate and Print Version"
 
   - script: |
       dotnet restore HelloWorld/HelloWorld.csproj
       dotnet restore ReleaseGuardian.Tests/ReleaseGuardian.Tests.csproj
-    displayName: 'Restore Dependencies'
+    displayName: "Restore Dependencies"
 
   - task: SonarCloudPrepare@4.4.0
-    displayName: 'Guardian Security - Prepare Analysis'
+    displayName: "Guardian Security - Prepare Analysis"
     condition: and(succeeded(), eq(variables['Build.SourceBranch'], 'refs/heads/feature/advanced-ci'))
     inputs:
-      SonarCloud: 'SonarQube-ReleaseGuardian'
-      organization: 'yaninagroisman'
-      scannerMode: 'dotnet'
-      projectKey: 'yaninagroisman_azure-project'
+      SonarCloud: "SonarQube-ReleaseGuardian"
+      organization: "yaninagroisman"
+      scannerMode: "dotnet"
+      projectKey: "yaninagroisman_azure-project"
       extraProperties: |
         sonar.qualitygate.wait=true
         sonar.qualitygate.timeout=300
         sonar.qualitygate.wait=true
         sonar.qualitygate.timeout=300
         sonar.cs.opencover.reportsPaths=$(Agent.TempDirectory)/TestResults/**/coverage.opencover.xml
+        sonar.coverage.exclusions=**/HelloWorld/Program.cs
 
   - script: |
       dotnet build HelloWorld/HelloWorld.csproj \
         --configuration Release \
         --no-restore \
         -p:Version=$(version)
-    displayName: 'Build .NET Application'
+    displayName: "Build .NET Application"
 
   - script: |
       dotnet test ReleaseGuardian.Tests/ReleaseGuardian.Tests.csproj \
@@ -86,7 +86,7 @@ steps:
         --logger "trx;LogFileName=guardian-tests.trx" \
         --results-directory "$(Agent.TempDirectory)/TestResults" \
         -- DataCollectionRunSettings.DataCollectors.DataCollector.Configuration.Format=opencover
-    displayName: 'Guardian Unit Tests with Coverage'
+    displayName: "Guardian Unit Tests with Coverage"
 
   - bash: |
       echo "Checking OpenCover reports..."
@@ -97,31 +97,30 @@ steps:
         -print
 
       test -n "$(find "$(Agent.TempDirectory)/TestResults" -name 'coverage.opencover.xml' -print -quit)"
-    displayName: 'Guardian - Verify Coverage Report'
+    displayName: "Guardian - Verify Coverage Report"
 
   - task: PublishTestResults@2
-    displayName: 'Publish Guardian Test Results'
+    displayName: "Publish Guardian Test Results"
     condition: succeededOrFailed()
     inputs:
-      testResultsFormat: 'VSTest'
-      testResultsFiles: 'guardian-tests.trx'
-      searchFolder: '$(Agent.TempDirectory)/TestResults'
-      testRunTitle: 'Release Guardian Unit Tests'
+      testResultsFormat: "VSTest"
+      testResultsFiles: "guardian-tests.trx"
+      searchFolder: "$(Agent.TempDirectory)/TestResults"
+      testRunTitle: "Release Guardian Unit Tests"
       failTaskOnFailedTests: true
 
-
   - script: dotnet HelloWorld/bin/Release/net8.0/HelloWorld.dll
-    displayName: 'Smoke Test'
+    displayName: "Smoke Test"
 
   - task: SonarCloudAnalyze@4.4.0
-    displayName: 'Guardian Security - Analyze Code'
+    displayName: "Guardian Security - Analyze Code"
     condition: and(succeeded(), eq(variables['Build.SourceBranch'], 'refs/heads/feature/advanced-ci'))
 
   - task: SonarCloudPublish@4.4.0
-    displayName: 'Guardian Security - Quality Gate'
+    displayName: "Guardian Security - Quality Gate"
     condition: and(succeeded(), eq(variables['Build.SourceBranch'], 'refs/heads/feature/advanced-ci'))
     inputs:
-      pollingTimeoutSec: '300'
+      pollingTimeoutSec: "300"
 
   - script: |
       dotnet publish HelloWorld/HelloWorld.csproj \
@@ -130,25 +129,25 @@ steps:
         -p:Version=$(version) \
         -p:UseAppHost=false \
         --output $(Build.ArtifactStagingDirectory)/helloworld
-    displayName: 'Prepare Application for Publishing'
+    displayName: "Prepare Application for Publishing"
 
   - task: UniversalPackages@0
-    displayName: 'Publish to Azure Artifacts'
+    displayName: "Publish to Azure Artifacts"
     inputs:
-      command: 'publish'
-      publishDirectory: '$(Build.ArtifactStagingDirectory)/helloworld'
-      feedsToUsePublish: 'internal'
-      vstsFeedPublish: 'azure-project/helloworld-feed'
-      vstsFeedPackagePublish: 'helloworld'
-      versionOption: 'custom'
-      versionPublish: '$(version)'
-      packagePublishDescription: 'HelloWorld .NET application'
+      command: "publish"
+      publishDirectory: "$(Build.ArtifactStagingDirectory)/helloworld"
+      feedsToUsePublish: "internal"
+      vstsFeedPublish: "azure-project/helloworld-feed"
+      vstsFeedPackagePublish: "helloworld"
+      versionOption: "custom"
+      versionPublish: "$(version)"
+      packagePublishDescription: "HelloWorld .NET application"
 
   - bash: |
       echo "Running advanced CI pipeline"
       echo "Current branch: $BRANCH_NAME"
       echo "Full branch reference: $BRANCH_REF"
-    displayName: 'Advanced CI - Feature Branch'
+    displayName: "Advanced CI - Feature Branch"
     condition: and(succeeded(), eq(variables['Build.SourceBranch'], 'refs/heads/feature/advanced-ci'))
     env:
       BRANCH_NAME: $(Build.SourceBranchName)
