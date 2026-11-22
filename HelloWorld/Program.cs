@@ -4,23 +4,18 @@ using ReleaseGuardian.Core;
 string version = Assembly.GetExecutingAssembly()
     .GetName().Version?.ToString(3) ?? "unknown";
 
+GuardianResult result = GuardianService.ValidateRelease(version);
+
 Console.WriteLine("================================");
-Console.WriteLine("      RELEASE GUARDIAN");
+Console.WriteLine("       🛡️  RELEASE GUARDIAN");
 Console.WriteLine("================================");
 
-Console.WriteLine($"Application Version: {version}");
+Console.WriteLine($"Application Version: {result.Version}");
+Console.WriteLine($"Version Validation: {(result.IsValid ? "PASSED" : "FAILED")}");
+Console.WriteLine($"Guardian Status: {result.Status}");
+Console.WriteLine($"Message: {result.Message}");
 
-bool isValid = VersionValidator.IsValid(version);
-
-if (isValid)
+if (!result.IsValid)
 {
-    Console.WriteLine("Version Validation: PASSED");
-    Console.WriteLine("Guardian Status: READY");
-}
-else
-{
-    Console.WriteLine("Version Validation: FAILED");
-    Console.WriteLine("Guardian Status: BLOCKED");
-
     Environment.ExitCode = 1;
 }
