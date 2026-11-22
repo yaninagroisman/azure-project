@@ -14,6 +14,7 @@ variables:
 
 steps:
   - checkout: self
+    fetchDepth: 0
 
   - bash: |
       set -euo pipefail
@@ -38,7 +39,7 @@ steps:
       echo "✅ Guardian Preflight PASSED"
     displayName: 'Guardian Preflight - Fast Checks'
 
-    
+
   - task: UseDotNet@2
     displayName: 'Install .NET SDK'
     inputs:
@@ -53,6 +54,18 @@ steps:
   - script: dotnet restore HelloWorld/HelloWorld.csproj
     displayName: 'Restore Dependencies'
 
+  - task: SonarCloudPrepare@4
+    displayName: 'Guardian Security - Prepare Analysis'
+    condition: and(succeeded(), eq(variables['Build.SourceBranch'], 'refs/heads/feature/advanced-ci'))
+    inputs:
+      SonarCloud: 'SonarQube-ReleaseGuardian'
+      organization: 'yaninagroisman'
+      scannerMode: 'dotnet'
+      projectKey: 'yaninagroisman_azure-project'
+      extraProperties: |
+        sonar.qualitygate.wait=true
+        sonar.qualitygate.timeout=300
+
   - script: |
       dotnet build HelloWorld/HelloWorld.csproj \
         --configuration Release \
@@ -62,6 +75,16 @@ steps:
 
   - script: dotnet HelloWorld/bin/Release/net8.0/HelloWorld.dll
     displayName: 'Run Hello World'
+
+  - task: SonarCloudAnalyze@4
+    displayName: 'Guardian Security - Analyze Code'
+    condition: and(succeeded(), eq(variables['Build.SourceBranch'], 'refs/heads/feature/advanced-ci'))
+
+  - task: SonarCloudPublish@4
+    displayName: 'Guardian Security - Quality Gate'
+    condition: and(succeeded(), eq(variables['Build.SourceBranch'], 'refs/heads/feature/advanced-ci'))
+    inputs:
+      pollingTimeoutSec: '300'
 
   - script: |
       dotnet publish HelloWorld/HelloWorld.csproj \
