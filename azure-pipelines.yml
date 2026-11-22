@@ -2,19 +2,11 @@ trigger:
   - main
 
 pool:
-  vmImage: 'ubuntu-latest'
+  vmImage: 'ubuntu-24.04'
 
 steps:
-  - checkout: self
-
-  - task: UseDotNet@2
-    displayName: 'Install .NET SDK'
-    inputs:
-      packageType: 'sdk'
-      version: '8.0.x'
-
-  - script: dotnet restore HelloWorld/HelloWorld.csproj
-    displayName: 'Restore Dependencies'
-
-  - script: dotnet build HelloWorld/HelloWorld.csproj --configuration Release --no-restore
-    displayName: 'Build .NET Application'
+  - script: |
+      echo "Hello from Azure DevOps!"
+      echo "Agent: $(Agent.Name)"
+      echo "OS: $(Agent.OS)"
+    displayName: 'Test Microsoft-hosted Agent'
