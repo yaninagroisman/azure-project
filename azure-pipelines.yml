@@ -115,12 +115,22 @@ steps:
       pollingTimeoutSec: "300"
 
   - bash: |
+      set -euo pipefail
+
+      dotnet run \
+        --project ReleaseGuardian/ReleaseGuardian.csproj \
+        --configuration Release \
+        -- "$(version)"
+    displayName: "Release Guardian - Validate HelloWorld Version"
+    condition: succeeded()
+
+  - bash: |
       dotnet pack HelloWorld/HelloWorld.csproj \
         --configuration Release \
         --no-build \
         -p:PackageVersion=$(version) \
         --output "$(Build.ArtifactStagingDirectory)/nuget"
-    displayName: "Publish HelloWorld NuGet Package"
+    displayName: "Prepare HelloWorld NuGet Package"
     condition: and(succeeded(), eq(variables['Build.SourceBranch'], 'refs/heads/feature/advanced-ci'))
 
   - bash: |
@@ -138,7 +148,6 @@ steps:
           "branch": os.environ["BRANCH_NAME"],
           "commit": os.environ["COMMIT_SHA"],
           "buildId": os.environ["BUILD_ID"],
-          "qualityGate": "NOT_VERIFIED",
           "artifact": os.environ["ARTIFACT_NAME"]
       }
 
