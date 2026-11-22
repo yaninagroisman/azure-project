@@ -1,5 +1,8 @@
 trigger:
-  - main
+  branches:
+    include:
+      - main
+      - feature/advanced-ci
 
 pool:
   vmImage: 'ubuntu-24.04'
@@ -56,3 +59,10 @@ steps:
       versionOption: 'custom'
       versionPublish: '$(version)'
       packagePublishDescription: 'HelloWorld .NET application'
+
+  - script: |
+      echo "Running advanced CI pipeline"
+      echo "Current branch: $(Build.SourceBranchName)"
+      echo "Full branch reference: $(Build.SourceBranch)"
+    displayName: 'Advanced CI - Feature Branch'
+    condition: eq(variables['Build.SourceBranch'], 'refs/heads/feature/advanced-ci')
