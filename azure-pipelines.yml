@@ -74,9 +74,9 @@ steps:
     displayName: 'Build .NET Application'
 
   - script: dotnet HelloWorld/bin/Release/net8.0/HelloWorld.dll
-    displayName: 'Run Hello World'
+    displayName: 'Smoke Test'
 
-  - task: SonarCloudAnalyze@4
+  - task: SonarCloudAnalyze@4.4.0
     displayName: 'Guardian Security - Analyze Code'
     condition: and(succeeded(), eq(variables['Build.SourceBranch'], 'refs/heads/feature/advanced-ci'))
 
@@ -107,9 +107,12 @@ steps:
       versionPublish: '$(version)'
       packagePublishDescription: 'HelloWorld .NET application'
 
-  - script: |
+  - bash: |
       echo "Running advanced CI pipeline"
-      echo "Current branch: $(Build.SourceBranchName)"
-      echo "Full branch reference: $(Build.SourceBranch)"
+      echo "Current branch: $BRANCH_NAME"
+      echo "Full branch reference: $BRANCH_REF"
     displayName: 'Advanced CI - Feature Branch'
-    condition: eq(variables['Build.SourceBranch'], 'refs/heads/feature/advanced-ci')
+    condition: and(succeeded(), eq(variables['Build.SourceBranch'], 'refs/heads/feature/advanced-ci'))
+    env:
+      BRANCH_NAME: $(Build.SourceBranchName)
+      BRANCH_REF: $(Build.SourceBranch)
