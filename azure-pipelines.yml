@@ -122,6 +122,26 @@ steps:
     inputs:
       pollingTimeoutSec: "300"
 
+  - bash: |
+      dotnet pack ReleaseGuardian.Core/ReleaseGuardian.Core.csproj \
+        --configuration Release \
+        --no-build \
+        -p:PackageVersion=$(version) \
+        --output "$(Build.ArtifactStagingDirectory)/nuget"
+    displayName: "Guardian - Create NuGet Package"
+    condition: and(succeeded(), eq(variables['Build.SourceBranch'], 'refs/heads/feature/advanced-ci'))
+
+  - task: NuGetAuthenticate@1
+    displayName: "Guardian - NuGet Authentication"
+    condition: and(succeeded(), eq(variables['Build.SourceBranch'], 'refs/heads/feature/advanced-ci'))
+
+  - bash: |
+      dotnet nuget push "$(Build.ArtifactStagingDirectory)/nuget/"*.nupkg \
+        --source "https://pkgs.dev.azure.com/tadjichka755/azure-project/_packaging/helloworld-feed/nuget/v3/index.json" \
+        --api-key AzureArtifacts
+    displayName: "Guardian - Publish NuGet Package"
+    condition: and(succeeded(), eq(variables['Build.SourceBranch'], 'refs/heads/feature/advanced-ci'))
+
   - script: |
       dotnet publish HelloWorld/HelloWorld.csproj \
         --configuration Release \
