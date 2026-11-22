@@ -15,6 +15,30 @@ variables:
 steps:
   - checkout: self
 
+  - bash: |
+      set -euo pipefail
+
+      echo "🛡️ RELEASE GUARDIAN — PREFLIGHT"
+
+      echo "Checking source files..."
+      test -s HelloWorld/Program.cs
+      test -f HelloWorld/HelloWorld.csproj
+
+      echo "Checking C# project XML..."
+      python3 - <<'PY'
+      import xml.etree.ElementTree as ET
+      ET.parse("HelloWorld/HelloWorld.csproj")
+      print("Project XML: VALID")
+      PY
+
+      echo "Checking whitespace and conflict markers..."
+      empty_tree=$(git hash-object -t tree /dev/null)
+      git diff --check "$empty_tree" HEAD -- HelloWorld/
+
+      echo "✅ Guardian Preflight PASSED"
+    displayName: 'Guardian Preflight - Fast Checks'
+
+    
   - task: UseDotNet@2
     displayName: 'Install .NET SDK'
     inputs:
