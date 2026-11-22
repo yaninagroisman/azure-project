@@ -19,7 +19,7 @@ steps:
   - bash: |
       set -euo pipefail
 
-      echo "🛡️ RELEASE GUARDIAN — PREFLIGHT"
+      echo "🛡️ PREFLIGHT"
 
       echo "Checking source files..."
       test -s HelloWorld/Program.cs
@@ -36,7 +36,7 @@ steps:
       empty_tree=$(git hash-object -t tree /dev/null)
       git diff --check "$empty_tree" HEAD -- HelloWorld/
 
-      echo "✅ Guardian Preflight PASSED"
+      echo "✅ Preflight PASSED"
     displayName: "Preflight - Fast Checks"
 
   - task: UseDotNet@2
@@ -71,7 +71,7 @@ steps:
     displayName: "Restore Dependencies"
 
   - task: SonarCloudPrepare@4.4.0
-    displayName: "Guardian Security - Prepare Analysis"
+    displayName: "SonarCloud - Prepare Analysis"
     condition: and(succeeded(), eq(variables['Build.SourceBranch'], 'refs/heads/feature/advanced-ci'))
     inputs:
       SonarCloud: "SonarQube-ReleaseGuardian"
@@ -105,11 +105,11 @@ steps:
     displayName: "Smoke Test - HelloWorld"
 
   - task: SonarCloudAnalyze@4.4.0
-    displayName: "Guardian Security - Analyze Code"
+    displayName: "SonarCloud - Analyze Code"
     condition: and(succeeded(), eq(variables['Build.SourceBranch'], 'refs/heads/feature/advanced-ci'))
 
   - task: SonarCloudPublish@4.4.0
-    displayName: "Guardian Security - Quality Gate"
+    displayName: "SonarCloud - Quality Gate"
     condition: and(succeeded(), eq(variables['Build.SourceBranch'], 'refs/heads/feature/advanced-ci'))
     inputs:
       pollingTimeoutSec: "300"
@@ -122,6 +122,45 @@ steps:
         --output "$(Build.ArtifactStagingDirectory)/nuget"
     displayName: "Publish HelloWorld NuGet Package"
     condition: and(succeeded(), eq(variables['Build.SourceBranch'], 'refs/heads/feature/advanced-ci'))
+
+  - bash: |
+      set -euo pipefail
+
+      mkdir -p "$ARTIFACT_DIR"
+
+      python3 - <<'PY'
+      import json
+      import os
+
+      manifest = {
+          "application": "HelloWorld",
+          "version": os.environ["APP_VERSION"],
+          "branch": os.environ["BRANCH_NAME"],
+          "commit": os.environ["COMMIT_SHA"],
+          "buildId": os.environ["BUILD_ID"],
+          "qualityGate": "NOT_VERIFIED",
+          "artifact": os.environ["ARTIFACT_NAME"]
+      }
+
+      path = os.path.join(
+          os.environ["ARTIFACT_DIR"],
+          "release-manifest.json"
+      )
+
+      with open(path, "w", encoding="utf-8") as f:
+          json.dump(manifest, f, indent=2)
+
+      print(json.dumps(manifest, indent=2))
+      PY
+    displayName: "Generate Release Manifest"
+    condition: and(succeeded(), eq(variables['Build.SourceBranch'], 'refs/heads/feature/advanced-ci'))
+    env:
+      APP_VERSION: $(version)
+      BRANCH_NAME: $(Build.SourceBranch)
+      COMMIT_SHA: $(Build.SourceVersion)
+      BUILD_ID: $(Build.BuildId)
+      ARTIFACT_NAME: $(artifactName)
+      ARTIFACT_DIR: $(Build.SourcesDirectory)/HelloWorld/bin/Release/net8.0
 
   - task: PublishPipelineArtifact@1
     displayName: "Publish HelloWorld Pipeline Artifact"
