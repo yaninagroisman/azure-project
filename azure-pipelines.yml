@@ -4,6 +4,11 @@ trigger:
 pool:
   vmImage: 'ubuntu-24.04'
 
+variables:
+  major: '1'
+  minor: '0'
+  version: '$(major).$(minor).$(Build.BuildId)'
+
 steps:
   - checkout: self
 
@@ -13,10 +18,19 @@ steps:
       packageType: 'sdk'
       version: '8.0.x'
 
+  - script: |
+      echo "Application Version: $(version)"
+      echo "Build ID: $(Build.BuildId)"
+    displayName: 'Generate and Print Version'
+
   - script: dotnet restore HelloWorld/HelloWorld.csproj
     displayName: 'Restore Dependencies'
 
-  - script: dotnet build HelloWorld/HelloWorld.csproj --configuration Release --no-restore
+  - script: |
+      dotnet build HelloWorld/HelloWorld.csproj \
+        --configuration Release \
+        --no-restore \
+        -p:Version=$(version)
     displayName: 'Build .NET Application'
 
   - script: dotnet HelloWorld/bin/Release/net8.0/HelloWorld.dll
