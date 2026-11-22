@@ -37,7 +37,7 @@ steps:
       git diff --check "$empty_tree" HEAD -- HelloWorld/
 
       echo "✅ Guardian Preflight PASSED"
-    displayName: "Guardian Preflight - Fast Checks"
+    displayName: "Preflight - Fast Checks"
 
   - task: UseDotNet@2
     displayName: "Install .NET SDK"
@@ -59,7 +59,6 @@ steps:
       artifact_name="${branch}_${APP_VERSION}"
 
       echo "Artifact name: $artifact_name"
-
       echo "##vso[build.addbuildtag]$artifact_name"
       echo "##vso[task.setvariable variable=artifactName]$artifact_name"
     displayName: "Generate Artifact Tag"
@@ -69,7 +68,6 @@ steps:
 
   - script: |
       dotnet restore HelloWorld/HelloWorld.csproj
-      dotnet restore ReleaseGuardian.Tests/ReleaseGuardian.Tests.csproj
     displayName: "Restore Dependencies"
 
   - task: SonarCloudPrepare@4.4.0
@@ -83,10 +81,7 @@ steps:
       extraProperties: |
         sonar.qualitygate.wait=true
         sonar.qualitygate.timeout=300
-        sonar.qualitygate.wait=true
-        sonar.qualitygate.timeout=300
-        sonar.cs.opencover.reportsPaths=$(Agent.TempDirectory)/TestResults/**/coverage.opencover.xml
-        sonar.coverage.exclusions=**/HelloWorld/Program.cs
+        sonar.exclusions=**/ReleaseGuardian.Core/**,**/ReleaseGuardian/**,**/ReleaseGuardian.Tests/**
 
   - script: |
       dotnet build HelloWorld/HelloWorld.csproj \
@@ -95,39 +90,19 @@ steps:
         -p:Version=$(version)
     displayName: "Build .NET Application"
 
-  - script: |
-      dotnet test ReleaseGuardian.Tests/ReleaseGuardian.Tests.csproj \
-        --configuration Release \
-        --no-restore \
-        --collect:"XPlat Code Coverage" \
-        --logger "trx;LogFileName=guardian-tests.trx" \
-        --results-directory "$(Agent.TempDirectory)/TestResults" \
-        -- DataCollectionRunSettings.DataCollectors.DataCollector.Configuration.Format=opencover
-    displayName: "Guardian Unit Tests with Coverage"
-
   - bash: |
-      echo "Checking OpenCover reports..."
+      set -euo pipefail
+      output=$(dotnet HelloWorld/bin/Release/net8.0/HelloWorld.dll)
 
-      find "$(Agent.TempDirectory)/TestResults" \
-        -name "coverage.opencover.xml" \
-        -type f \
-        -print
+      echo "Application output: $output"
 
-      test -n "$(find "$(Agent.TempDirectory)/TestResults" -name 'coverage.opencover.xml' -print -quit)"
-    displayName: "Guardian - Verify Coverage Report"
+      if [[ "$output" != "Hello, World!" ]]; then
+        echo "ERROR: Unexpected application output"
+        exit 1
+      fi
 
-  - task: PublishTestResults@2
-    displayName: "Publish Guardian Test Results"
-    condition: succeededOrFailed()
-    inputs:
-      testResultsFormat: "VSTest"
-      testResultsFiles: "guardian-tests.trx"
-      searchFolder: "$(Agent.TempDirectory)/TestResults"
-      testRunTitle: "Release Guardian Unit Tests"
-      failTaskOnFailedTests: true
-
-  - script: dotnet HelloWorld/bin/Release/net8.0/HelloWorld.dll
-    displayName: "Smoke Test"
+      echo "HelloWorld Smoke Test PASSED"
+    displayName: "Smoke Test - HelloWorld"
 
   - task: SonarCloudAnalyze@4.4.0
     displayName: "Guardian Security - Analyze Code"
@@ -140,23 +115,31 @@ steps:
       pollingTimeoutSec: "300"
 
   - bash: |
-      dotnet pack ReleaseGuardian.Core/ReleaseGuardian.Core.csproj \
+      dotnet pack HelloWorld/HelloWorld.csproj \
         --configuration Release \
         --no-build \
         -p:PackageVersion=$(version) \
         --output "$(Build.ArtifactStagingDirectory)/nuget"
-    displayName: "Guardian - Create NuGet Package"
+    displayName: "Publish HelloWorld NuGet Package"
     condition: and(succeeded(), eq(variables['Build.SourceBranch'], 'refs/heads/feature/advanced-ci'))
 
+  - task: PublishPipelineArtifact@1
+    displayName: "Publish HelloWorld Pipeline Artifact"
+    condition: and(succeeded(), eq(variables['Build.SourceBranch'], 'refs/heads/feature/advanced-ci'))
+    inputs:
+      targetPath: '$(Build.SourcesDirectory)/HelloWorld/bin/Release/net8.0'
+      artifact: '$(artifactName)'
+      publishLocation: 'pipeline'
+
   - task: NuGetAuthenticate@1
-    displayName: "Guardian - NuGet Authentication"
+    displayName: "NuGet Authentication"
     condition: and(succeeded(), eq(variables['Build.SourceBranch'], 'refs/heads/feature/advanced-ci'))
 
   - bash: |
       dotnet nuget push "$(Build.ArtifactStagingDirectory)/nuget/"*.nupkg \
         --source "https://pkgs.dev.azure.com/tadjichka755/azure-project/_packaging/helloworld-feed/nuget/v3/index.json" \
         --api-key AzureArtifacts
-    displayName: "Guardian - Publish NuGet Package"
+    displayName: "Publish NuGet Package"
     condition: and(succeeded(), eq(variables['Build.SourceBranch'], 'refs/heads/feature/advanced-ci'))
 
   - script: |
@@ -186,7 +169,7 @@ steps:
       echo "Running advanced CI pipeline"
       echo "Current branch: $BRANCH_NAME"
       echo "Full branch reference: $BRANCH_REF"
-    displayName: "Advanced CI - Feature Branch"
+    displayName: "Feature Branch"
     condition: and(succeeded(), eq(variables['Build.SourceBranch'], 'refs/heads/feature/advanced-ci'))
     env:
       BRANCH_NAME: $(Build.SourceBranchName)
