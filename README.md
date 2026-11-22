@@ -1,4 +1,6 @@
 HelloWorld CI/CD with Azure DevOps
+
+
 This project started as a simple .NET console app that prints Hello, World!. The application itself is intentionally small. The main work is in the pipeline: building the app, checking the result, assigning a version, and publishing packages from different branches.
 
 I kept the application simple so I could focus on how the release process works from a Git push to a published artifact.
