@@ -67,6 +67,9 @@ steps:
       extraProperties: |
         sonar.qualitygate.wait=true
         sonar.qualitygate.timeout=300
+        sonar.qualitygate.wait=true
+        sonar.qualitygate.timeout=300
+        sonar.cs.opencover.reportsPaths=$(Agent.TempDirectory)/TestResults/**/coverage.opencover.xml
 
   - script: |
       dotnet build HelloWorld/HelloWorld.csproj \
@@ -79,9 +82,22 @@ steps:
       dotnet test ReleaseGuardian.Tests/ReleaseGuardian.Tests.csproj \
         --configuration Release \
         --no-restore \
+        --collect:"XPlat Code Coverage" \
         --logger "trx;LogFileName=guardian-tests.trx" \
-        --results-directory $(Agent.TempDirectory)/TestResults
-    displayName: 'Guardian Unit Tests'
+        --results-directory "$(Agent.TempDirectory)/TestResults" \
+        -- DataCollectionRunSettings.DataCollectors.DataCollector.Configuration.Format=opencover
+    displayName: 'Guardian Unit Tests with Coverage'
+
+  - bash: |
+      echo "Checking OpenCover reports..."
+
+      find "$(Agent.TempDirectory)/TestResults" \
+        -name "coverage.opencover.xml" \
+        -type f \
+        -print
+
+      test -n "$(find "$(Agent.TempDirectory)/TestResults" -name 'coverage.opencover.xml' -print -quit)"
+    displayName: 'Guardian - Verify Coverage Report'
 
   - task: PublishTestResults@2
     displayName: 'Publish Guardian Test Results'
