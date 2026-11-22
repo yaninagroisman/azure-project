@@ -35,3 +35,24 @@ steps:
 
   - script: dotnet HelloWorld/bin/Release/net8.0/HelloWorld.dll
     displayName: 'Run Hello World'
+
+  - script: |
+      dotnet publish HelloWorld/HelloWorld.csproj \
+        --configuration Release \
+        --no-restore \
+        -p:Version=$(version) \
+        -p:UseAppHost=false \
+        --output $(Build.ArtifactStagingDirectory)/helloworld
+    displayName: 'Prepare Application for Publishing'
+
+  - task: UniversalPackages@0
+    displayName: 'Publish to Azure Artifacts'
+    inputs:
+      command: 'publish'
+      publishDirectory: '$(Build.ArtifactStagingDirectory)/helloworld'
+      feedsToUsePublish: 'internal'
+      vstsFeedPublish: 'azure-project/helloworld-feed'
+      vstsFeedPackagePublish: 'helloworld'
+      versionOption: 'custom'
+      versionPublish: '$(version)'
+      packagePublishDescription: 'HelloWorld .NET application'
