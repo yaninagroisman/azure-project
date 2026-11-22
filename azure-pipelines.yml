@@ -1,40 +1,194 @@
 trigger:
-  - main
+  branches:
+    include:
+      - main
+      - feature/advanced-ci
 
 pool:
-  vmImage: 'ubuntu-24.04'
+  vmImage: "ubuntu-24.04"
 
 variables:
-  major: '1'
-  minor: '0'
-  version: '$(major).$(minor).$(Build.BuildId)'
+  major: "1"
+  minor: "0"
+  version: "$(major).$(minor).$(Build.BuildId)"
 
 steps:
   - checkout: self
+    fetchDepth: 0
+
+  - bash: |
+      set -euo pipefail
+
+      echo "🛡️ PREFLIGHT"
+
+      echo "Checking source files..."
+      test -s HelloWorld/Program.cs
+      test -f HelloWorld/HelloWorld.csproj
+
+      echo "Checking C# project XML..."
+      python3 - <<'PY'
+      import xml.etree.ElementTree as ET
+      ET.parse("HelloWorld/HelloWorld.csproj")
+      print("Project XML: VALID")
+      PY
+
+      echo "Checking whitespace and conflict markers..."
+      empty_tree=$(git hash-object -t tree /dev/null)
+      git diff --check "$empty_tree" HEAD -- HelloWorld/
+
+      echo "✅ Preflight PASSED"
+    displayName: "Preflight - Fast Checks"
 
   - task: UseDotNet@2
-    displayName: 'Install .NET SDK'
+    displayName: "Install .NET SDK"
     inputs:
-      packageType: 'sdk'
-      version: '8.0.x'
+      packageType: "sdk"
+      version: "8.0.x"
 
   - script: |
       echo "Application Version: $(version)"
       echo "Build ID: $(Build.BuildId)"
-    displayName: 'Generate and Print Version'
+    displayName: "Generate and Print Version"
 
-  - script: dotnet restore HelloWorld/HelloWorld.csproj
-    displayName: 'Restore Dependencies'
+  - bash: |
+      set -euo pipefail
+
+      branch="${BRANCH_REF#refs/heads/}"
+      branch="${branch//\//-}"
+
+      artifact_name="${branch}_${APP_VERSION}"
+
+      echo "Artifact name: $artifact_name"
+      echo "##vso[build.addbuildtag]$artifact_name"
+      echo "##vso[task.setvariable variable=artifactName]$artifact_name"
+    displayName: "Generate Artifact Tag"
+    env:
+      BRANCH_REF: $(Build.SourceBranch)
+      APP_VERSION: $(version)
+
+  - script: |
+      dotnet restore HelloWorld/HelloWorld.csproj
+    displayName: "Restore Dependencies"
+
+  - task: SonarCloudPrepare@4.4.0
+    displayName: "SonarCloud - Prepare Analysis"
+    condition: and(succeeded(), eq(variables['Build.SourceBranch'], 'refs/heads/feature/advanced-ci'))
+    inputs:
+      SonarCloud: "SonarQube-ReleaseGuardian"
+      organization: "yaninagroisman"
+      scannerMode: "dotnet"
+      projectKey: "yaninagroisman_azure-project"
+      extraProperties: |
+        sonar.qualitygate.wait=true
+        sonar.qualitygate.timeout=300
+        sonar.exclusions=**/ReleaseGuardian.Core/**,**/ReleaseGuardian/**,**/ReleaseGuardian.Tests/**
 
   - script: |
       dotnet build HelloWorld/HelloWorld.csproj \
         --configuration Release \
         --no-restore \
         -p:Version=$(version)
-    displayName: 'Build .NET Application'
+    displayName: "Build .NET Application"
 
-  - script: dotnet HelloWorld/bin/Release/net8.0/HelloWorld.dll
-    displayName: 'Run Hello World'
+  - bash: |
+      set -euo pipefail
+      output=$(dotnet HelloWorld/bin/Release/net8.0/HelloWorld.dll)
+
+      echo "Application output: $output"
+
+      if [[ "$output" != "Hello, World!" ]]; then
+        echo "ERROR: Unexpected application output"
+        exit 1
+      fi
+
+      echo "HelloWorld Smoke Test PASSED"
+    displayName: "Smoke Test - HelloWorld"
+
+  - task: SonarCloudAnalyze@4.4.0
+    displayName: "SonarCloud - Analyze Code"
+    condition: and(succeeded(), eq(variables['Build.SourceBranch'], 'refs/heads/feature/advanced-ci'))
+
+  - task: SonarCloudPublish@4.4.0
+    displayName: "SonarCloud - Quality Gate"
+    condition: and(succeeded(), eq(variables['Build.SourceBranch'], 'refs/heads/feature/advanced-ci'))
+    inputs:
+      pollingTimeoutSec: "300"
+
+  - bash: |
+      set -euo pipefail
+
+      dotnet run \
+        --project ReleaseGuardian/ReleaseGuardian.csproj \
+        --configuration Release \
+        -- "$(version)"
+    displayName: "Release Guardian - Validate HelloWorld Version"
+    condition: succeeded()
+
+  - bash: |
+      dotnet pack HelloWorld/HelloWorld.csproj \
+        --configuration Release \
+        --no-build \
+        -p:PackageVersion=$(version) \
+        --output "$(Build.ArtifactStagingDirectory)/nuget"
+    displayName: "Prepare HelloWorld NuGet Package"
+    condition: and(succeeded(), eq(variables['Build.SourceBranch'], 'refs/heads/feature/advanced-ci'))
+
+  - bash: |
+      set -euo pipefail
+
+      mkdir -p "$ARTIFACT_DIR"
+
+      python3 - <<'PY'
+      import json
+      import os
+
+      manifest = {
+          "application": "HelloWorld",
+          "version": os.environ["APP_VERSION"],
+          "branch": os.environ["BRANCH_NAME"],
+          "commit": os.environ["COMMIT_SHA"],
+          "buildId": os.environ["BUILD_ID"],
+          "artifact": os.environ["ARTIFACT_NAME"]
+      }
+
+      path = os.path.join(
+          os.environ["ARTIFACT_DIR"],
+          "release-manifest.json"
+      )
+
+      with open(path, "w", encoding="utf-8") as f:
+          json.dump(manifest, f, indent=2)
+
+      print(json.dumps(manifest, indent=2))
+      PY
+    displayName: "Generate Release Manifest"
+    condition: and(succeeded(), eq(variables['Build.SourceBranch'], 'refs/heads/feature/advanced-ci'))
+    env:
+      APP_VERSION: $(version)
+      BRANCH_NAME: $(Build.SourceBranch)
+      COMMIT_SHA: $(Build.SourceVersion)
+      BUILD_ID: $(Build.BuildId)
+      ARTIFACT_NAME: $(artifactName)
+      ARTIFACT_DIR: $(Build.SourcesDirectory)/HelloWorld/bin/Release/net8.0
+
+  - task: PublishPipelineArtifact@1
+    displayName: "Publish HelloWorld Pipeline Artifact"
+    condition: and(succeeded(), eq(variables['Build.SourceBranch'], 'refs/heads/feature/advanced-ci'))
+    inputs:
+      targetPath: '$(Build.SourcesDirectory)/HelloWorld/bin/Release/net8.0'
+      artifact: '$(artifactName)'
+      publishLocation: 'pipeline'
+
+  - task: NuGetAuthenticate@1
+    displayName: "NuGet Authentication"
+    condition: and(succeeded(), eq(variables['Build.SourceBranch'], 'refs/heads/feature/advanced-ci'))
+
+  - bash: |
+      dotnet nuget push "$(Build.ArtifactStagingDirectory)/nuget/"*.nupkg \
+        --source "https://pkgs.dev.azure.com/tadjichka755/azure-project/_packaging/helloworld-feed/nuget/v3/index.json" \
+        --api-key AzureArtifacts
+    displayName: "Publish NuGet Package"
+    condition: and(succeeded(), eq(variables['Build.SourceBranch'], 'refs/heads/feature/advanced-ci'))
 
   - script: |
       dotnet publish HelloWorld/HelloWorld.csproj \
@@ -43,16 +197,28 @@ steps:
         -p:Version=$(version) \
         -p:UseAppHost=false \
         --output $(Build.ArtifactStagingDirectory)/helloworld
-    displayName: 'Prepare Application for Publishing'
+    displayName: "Prepare Application for Publishing"
+    condition: and(succeeded(), eq(variables['Build.SourceBranch'], 'refs/heads/main'))
 
   - task: UniversalPackages@0
-    displayName: 'Publish to Azure Artifacts'
+    displayName: "Publish to Azure Artifacts"
+    condition: and(succeeded(), eq(variables['Build.SourceBranch'], 'refs/heads/main'))
     inputs:
-      command: 'publish'
-      publishDirectory: '$(Build.ArtifactStagingDirectory)/helloworld'
-      feedsToUsePublish: 'internal'
-      vstsFeedPublish: 'azure-project/helloworld-feed'
-      vstsFeedPackagePublish: 'helloworld'
-      versionOption: 'custom'
-      versionPublish: '$(version)'
-      packagePublishDescription: 'HelloWorld .NET application'
+      command: "publish"
+      publishDirectory: "$(Build.ArtifactStagingDirectory)/helloworld"
+      feedsToUsePublish: "internal"
+      vstsFeedPublish: "azure-project/helloworld-feed"
+      vstsFeedPackagePublish: "helloworld"
+      versionOption: "custom"
+      versionPublish: "$(version)"
+      packagePublishDescription: "HelloWorld .NET application"
+
+  - bash: |
+      echo "Running advanced CI pipeline"
+      echo "Current branch: $BRANCH_NAME"
+      echo "Full branch reference: $BRANCH_REF"
+    displayName: "Feature Branch"
+    condition: and(succeeded(), eq(variables['Build.SourceBranch'], 'refs/heads/feature/advanced-ci'))
+    env:
+      BRANCH_NAME: $(Build.SourceBranchName)
+      BRANCH_REF: $(Build.SourceBranch)
