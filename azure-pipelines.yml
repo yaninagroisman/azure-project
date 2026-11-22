@@ -54,7 +54,7 @@ steps:
   - script: dotnet restore HelloWorld/HelloWorld.csproj
     displayName: 'Restore Dependencies'
 
-  - task: SonarCloudPrepare@4
+  - task: SonarCloudPrepare@4.4.0
     displayName: 'Guardian Security - Prepare Analysis'
     condition: and(succeeded(), eq(variables['Build.SourceBranch'], 'refs/heads/feature/advanced-ci'))
     inputs:
@@ -80,7 +80,7 @@ steps:
     displayName: 'Guardian Security - Analyze Code'
     condition: and(succeeded(), eq(variables['Build.SourceBranch'], 'refs/heads/feature/advanced-ci'))
 
-  - task: SonarCloudPublish@4
+  - task: SonarCloudPublish@4.4.0
     displayName: 'Guardian Security - Quality Gate'
     condition: and(succeeded(), eq(variables['Build.SourceBranch'], 'refs/heads/feature/advanced-ci'))
     inputs:
