@@ -51,7 +51,9 @@ steps:
       echo "Build ID: $(Build.BuildId)"
     displayName: 'Generate and Print Version'
 
-  - script: dotnet restore HelloWorld/HelloWorld.csproj
+  - script: |
+      dotnet restore HelloWorld/HelloWorld.csproj
+      dotnet restore ReleaseGuardian.Tests/ReleaseGuardian.Tests.csproj
     displayName: 'Restore Dependencies'
 
   - task: SonarCloudPrepare@4.4.0
@@ -72,6 +74,25 @@ steps:
         --no-restore \
         -p:Version=$(version)
     displayName: 'Build .NET Application'
+
+  - script: |
+      dotnet test ReleaseGuardian.Tests/ReleaseGuardian.Tests.csproj \
+        --configuration Release \
+        --no-restore \
+        --logger "trx;LogFileName=guardian-tests.trx" \
+        --results-directory $(Agent.TempDirectory)/TestResults
+    displayName: 'Guardian Unit Tests'
+
+  - task: PublishTestResults@2
+    displayName: 'Publish Guardian Test Results'
+    condition: succeededOrFailed()
+    inputs:
+      testResultsFormat: 'VSTest'
+      testResultsFiles: 'guardian-tests.trx'
+      searchFolder: '$(Agent.TempDirectory)/TestResults'
+      testRunTitle: 'Release Guardian Unit Tests'
+      failTaskOnFailedTests: true
+
 
   - script: dotnet HelloWorld/bin/Release/net8.0/HelloWorld.dll
     displayName: 'Smoke Test'
