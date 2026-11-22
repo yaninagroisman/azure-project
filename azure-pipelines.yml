@@ -50,6 +50,23 @@ steps:
       echo "Build ID: $(Build.BuildId)"
     displayName: "Generate and Print Version"
 
+  - bash: |
+      set -euo pipefail
+
+      branch="${BRANCH_REF#refs/heads/}"
+      branch="${branch//\//-}"
+
+      artifact_name="${branch}_${APP_VERSION}"
+
+      echo "Artifact name: $artifact_name"
+
+      echo "##vso[build.addbuildtag]$artifact_name"
+      echo "##vso[task.setvariable variable=artifactName]$artifact_name"
+    displayName: "Generate Artifact Tag"
+    env:
+      BRANCH_REF: $(Build.SourceBranch)
+      APP_VERSION: $(version)
+
   - script: |
       dotnet restore HelloWorld/HelloWorld.csproj
       dotnet restore ReleaseGuardian.Tests/ReleaseGuardian.Tests.csproj
